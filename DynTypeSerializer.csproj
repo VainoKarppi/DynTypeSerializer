@@ -5,7 +5,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
+    <Version>1.0.0</Version>
+
     <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <NoWarn>IL3002;IL2026;IL2065;IL3050;IL2069;IL3053;IDE0270;IDE0019;IL2062;IL3050;IL2026;IL2067;IL2070;IL2057;IL2075</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

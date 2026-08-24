@@ -69,22 +69,86 @@ namespace DynTypeSerializer;
 */
 
 /// <summary>
-/// A fully dynamic type-preserving JSON serializer.
-///
-/// RULES:
-///   1. If the runtime type matches the declared (static) type exactly → emit bare value, no $t tag.
-///   2. If the runtime type differs from the declared type, OR the declared type is object/interface
-///      → wrap as { "$t": "&lt;code&gt;", "$v": &lt;value&gt; } so the deserializer knows the real type.
-///   3. Every complex object's properties are always serialized (not just on mismatch).
-///   4. Primitives / value-types that JSON handles natively are emitted as JsonValue leaves.
-///   5. Round-trip fidelity: Deserialize&lt;T&gt;(Serialize(x)) == x for all supported types.
+/// Provides a fully dynamic, type-preserving JSON serializer.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Serialization follows these rules:
+/// </para>
+/// <list type="number">
+/// <item>
+/// <description>
+/// If the runtime type exactly matches the declared (static) type, the value
+/// is emitted without a <c>$t</c> type tag.
+/// </description>
+/// </item>
+/// <item>
+/// <description>
+/// If the runtime type differs from the declared type, or the declared type
+/// is <see cref="object"/> or an interface, the value is wrapped as
+/// <c>{ "$t": "&lt;code&gt;", "$v": &lt;value&gt; }</c> so the deserializer can
+/// determine the actual runtime type.
+/// </description>
+/// </item>
+/// <item>
+/// <description>
+/// Properties of complex objects are always serialized, regardless of whether
+/// the runtime and declared types match.
+/// </description>
+/// </item>
+/// <item>
+/// <description>
+/// Primitive and value types supported natively by JSON are emitted as
+/// <see cref="System.Text.Json.Nodes.JsonValue"/> leaves.
+/// </description>
+/// </item>
+/// <item>
+/// <description>
+/// Serialization is intended to provide round-trip fidelity, such that
+/// <c>Deserialize&lt;T&gt;(Serialize(x))</c> reconstructs <c>x</c> for all
+/// supported types.
+/// </description>
+/// </item>
+/// </list>
+/// </remarks>
 public static partial class Serializer
 {
+    /// <summary>
+    /// Provides configuration options for the serializer.
+    /// </summary>
     public class Options
     {
+        /// <summary>
+        /// Gets or sets a value indicating whether the root object's runtime
+        /// type should be included in the serialized output.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> to include the root runtime type;
+        /// otherwise, <see langword="false"/>.
+        /// The default is <see langword="false"/>.
+        /// </value>
         public bool IncludeRootType { get; set; } = false;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether full assembly-qualified
+        /// type information should be included in type identifiers.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> to include full assembly information;
+        /// otherwise, <see langword="false"/>.
+        /// The default is <see langword="false"/>.
+        /// </value>
         public bool IncludeFullAssemblyInfo { get; set; } = false;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the serialized JSON should
+        /// be formatted with indentation.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> to write indented JSON;
+        /// otherwise, <see langword="false"/>.
+        /// The default is <see langword="false"/>.
+        /// </value>
         public bool WriteIndented { get; set; } = false;
     }
 
