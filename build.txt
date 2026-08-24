@@ -1,0 +1,64 @@
+@"
+DynTypeSerializer - Build Instructions
+======================================
+
+Requirements
+------------
+- .NET SDK 10.0+
+- PowerShell (optional)
+
+Project
+-------
+Target framework: net10.0
+Native AOT compatibility analysis: enabled
+
+Restore dependencies
+--------------------
+dotnet restore
+
+Build
+-----
+dotnet build -c Release
+
+Build with warnings treated as errors
+-------------------------------------
+dotnet build -c Release -warnaserror
+
+Create NuGet package
+--------------------
+dotnet pack -c Release
+
+The resulting package will be created in:
+
+bin\Release\DynTypeSerializer.<VERSION>.nupkg
+
+The package is NOT published automatically.
+
+Test package contents
+---------------------
+dotnet pack -c Release -o .\packages
+
+This creates the .nupkg file in the packages directory.
+
+Clean build output
+------------------
+dotnet clean
+Remove-Item .\bin, .\obj -Recurse -Force
+
+Version
+-------
+The package version is currently defined in DynTypeSerializer.csproj.
+
+Before creating a release, update the Version property in the project file.
+
+Example:
+
+<Version>1.0.0</Version>
+
+Publishing
+----------
+Publishing is intentionally not configured yet.
+
+Do NOT use dotnet nuget push until a NuGet repository and publishing workflow
+have been configured and tested.
+"@ | Set-Content build.txt
