@@ -120,7 +120,7 @@ public class SerializeTests
     [Fact]
     public void Serialize_ArrayOfObjects_EachElementTagged()
     {
-        object value = new object[] { 1, "two", true };
+        object[] value = { 1, "two", true };
         string json = Serializer.Serialize(value);
         Assert.StartsWith("[", json);
         Assert.Contains("\"$t\":\"i\"", json);
@@ -131,7 +131,7 @@ public class SerializeTests
     [Fact]
     public void Serialize_StringKeyedDictionary_ProducesObject()
     {
-        object value = new Dictionary<string, int> { ["a"] = 1, ["b"] = 2 };
+        var value = new Dictionary<string, int> { ["a"] = 1, ["b"] = 2 };
         string json = Serializer.Serialize(value);
         Assert.StartsWith("{", json);
         Assert.Contains("\"a\"", json);
@@ -141,7 +141,7 @@ public class SerializeTests
     [Fact]
     public void Serialize_IntKeyedDictionary_ProducesKeyValueArray()
     {
-        object value = new Dictionary<int, string> { [1] = "one", [2] = "two" };
+        var value = new Dictionary<int, string> { [1] = "one", [2] = "two" };
         string json = Serializer.Serialize(value);
         Assert.StartsWith("[", json);
         Assert.Contains("\"$k\"", json);

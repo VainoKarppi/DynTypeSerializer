@@ -28,7 +28,7 @@ public static partial class Serializer
             WriteIndented = options.WriteIndented
         };
 
-        JsonNode? node = BuildNode(obj, obj?.GetType() ?? typeof(object), options);
+        JsonNode? node = BuildNode(obj, typeof(object), options);
 
         if (node is null) return "null";
 
