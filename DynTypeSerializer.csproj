@@ -27,6 +27,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The library lives at the repository root, so exclude the test
+         project from its default **/*.cs glob. -->
+    <Compile Remove="tests\**\*.cs" />
+    <None Remove="tests\**\*" />
+    <EmbeddedResource Remove="tests\**\*" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
   </ItemGroup>
 

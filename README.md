@@ -242,6 +242,43 @@ The package is written to `bin\Release\DynTypeSerializer.<Version>.nupkg`.
 See [`build.txt`](build.txt) for the full set of build instructions, including
 how to build with warnings-as-errors and clean the output.
 
+## Testing
+
+The repository includes an xUnit test suite in
+[`tests/DynTypeSerializer.Tests`](tests/DynTypeSerializer.Tests). It covers the
+whole public surface of the library.
+
+### Running the tests
+
+```powershell
+dotnet test tests/DynTypeSerializer.Tests -c Release
+```
+
+### What is covered
+
+| File | Coverage |
+| --- | --- |
+| `SerializeTests.cs` | Serialization output shape: primitives, boxed-value `$t`/`$v` tags, `DateTime`/`Guid`/`TimeSpan`/`decimal` encoding, enums, dictionaries, arrays, polymorphic type tags, `Type` properties, indentation. |
+| `DeserializeTests.cs` | Reading JSON back into typed values: tagged envelopes, dynamic root deserialization, dictionaries, arrays, `IncludeRootType` handling, and error cases (unknown types, malformed JSON, null results). |
+| `RoundTripTests.cs` | Round-trip fidelity — `Deserialize(Serialize(x)) ≈ x` for every supported type, complex models, polymorphism, nested graphs, and value precision. |
+| `OptionsAndMetadataTests.cs` | `Serializer.Options` (`IncludeRootType`, `WriteIndented`, `IncludeFullAssemblyInfo`) and the `ContainsRootType` / `GetRootType` helpers. |
+| `LoggingTests.cs` | The public `SerializerLogging.Configure(ILogger)` surface, including the no-op `NullLogger` fallback. |
+| `Models/TestModels.cs` | Shared test types used across the suite. |
+| `TestDoubles/RecordingLogger.cs` | An in-memory `ILogger` used to assert on emitted log output. |
+
+### Notes on behavior the tests assert
+
+- To preserve the runtime type of a boxed value you must serialize it with an
+  `object` declared type — i.e. `Serialize<object>(value)` — which emits the
+  `$t` tag. The non-generic `Serialize(value)` overload uses the actual runtime
+  type as the declared type, so it does not tag the root value.
+- `Deserialize<T>` throws `InvalidOperationException("Deserialization resulted
+  in null.")` rather than returning `null` when the result is null.
+- The internal level-specific logging helpers
+  (`SerializerLogging.Debug/Info/Warning/Error`) are not part of the public
+  API and are not currently exercised; the tests target the public
+  `Configure(ILogger)` entry point.
+
 ## License
 
 This project is released into the public domain under
