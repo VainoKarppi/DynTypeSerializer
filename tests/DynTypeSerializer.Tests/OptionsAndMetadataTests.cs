@@ -55,9 +55,10 @@ public class OptionsAndMetadataTests
     }
 
     [Fact]
-    public void GetRootType_InvalidJson_ReturnsNull()
+    public void GetRootType_InvalidJson_Throws()
     {
-        Assert.Null(Serializer.GetRootType("garbage"));
+        // Malformed JSON is no longer swallowed; it surfaces as an exception.
+        Assert.ThrowsAny<Exception>(() => Serializer.GetRootType("garbage"));
     }
 
     [Fact]

@@ -174,23 +174,19 @@ public static partial class Serializer
     /// <summary>Gets the root <see cref="Type"/> from JSON string with 'IncludeRootType'.</summary>
     public static Type? GetRootType(string json)
     {
-        try {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
 
-            if (root.ValueKind != JsonValueKind.Object)
-                throw new InvalidOperationException("JSON root is not an object.");
+        if (root.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("JSON root is not an object.");
 
-            if (root.TryGetProperty("$r", out var rProp))
-            {
-                string code = rProp.GetString() ?? throw new InvalidOperationException("$r type code was null.");
-                return ResolveType(code);
-            }
-
-            return typeof(object);
-        } catch {
-            return null;
+        if (root.TryGetProperty("$r", out var rProp))
+        {
+            string code = rProp.GetString() ?? throw new InvalidOperationException("$r type code was null.");
+            return ResolveType(code);
         }
+
+        return typeof(object);
     }
 
 
