@@ -125,10 +125,9 @@ public class RoundTripTests
     public void RoundTrip_NullableInt_Null()
     {
         int? value = null;
-        // Deserialize<T> throws when the result is null; verify that behavior
-        // for a null serialized value.
         string json = Serializer.Serialize((object?)value);
-        Assert.Throws<InvalidOperationException>(() => Serializer.Deserialize<int?>(json));
+        int? result = Serializer.Deserialize<int?>(json);
+        Assert.Null(result);
     }
 
     [Fact]

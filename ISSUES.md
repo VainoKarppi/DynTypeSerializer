@@ -2,7 +2,7 @@
 
 This file catalogs issues and behavioral observations found while building out
 the xUnit test suite (`tests/DynTypeSerializer.Tests`) and reviewing the
-library code. The test suite currently passes (89/89); most entries below are
+library code. The test suite currently passes (90/90); most entries below are
 behavioral quirks, non-standard patterns, or latent bugs that the tests either
 document or highlight — not necessarily failing tests.
 
@@ -11,6 +11,7 @@ Legend:
 - **Improvement** — a design/pattern change that would align the library with
   Microsoft/.NET conventions.
 - **Limitation** — documented, accepted constraint (often unavoidable).
+- **✅ Fixed** — resolved; the entry is kept for historical context.
 
 ---
 
@@ -38,7 +39,7 @@ Serializer.Serialize<object>(value); // {"$t":"i","$v":42}  (tagged)
 ```
 
 **Impact:** Calling `Serialize(value)` followed by `Deserialize<object>(...)`
-does **not** round-trip the type — a boxed `int` comes back as a string, and a
+does **not** round-trip the type — a boxed `int` comes back as a `long`, and a
 `Dog` instance comes back as a `Dictionary<string, object>`.
 
 **Suggested fix:** Treat the non-generic overload as `object`-declared by
@@ -47,49 +48,51 @@ type preservation.
 
 ---
 
-## 2. `Deserialize<T>` throws instead of returning `null` — **Bug**
+## 2. `Deserialize<T>` throws instead of returning `null` — **Bug** ✅ Fixed
 
 **Where:** `Deserialize.cs` → `Deserialize<T>(string json)`
 
+**Fixed in commit/change:** The `if (result == null) throw ...` guard was
+removed; `Deserialize<T>` now returns `default(T)` when the value is null.
+
 ```csharp
 object? result = ReadNode(root, typeof(T));
-if (result == null) throw new InvalidOperationException("Deserialization resulted in null.");
+return result is null ? default : (T)result;
 ```
 
-Deserializing a JSON `null` (or a value that resolves to null) throws
-`InvalidOperationException` rather than returning `null`/`default(T)`.
+Deserializing a JSON `null` (or a value that resolves to null) now returns
+`null`/`default(T)` rather than throwing.
 
 **Repro:**
 
 ```csharp
-Serializer.Deserialize<string?>("null"); // throws InvalidOperationException
+Serializer.Deserialize<string?>("null"); // now returns null
 ```
 
-**Impact:** Inconsistent with conventional serializer behavior; callers must
-try/catch to handle a legitimate `null` payload.
-
-**Suggested fix:** Return `default(T)` when the value is null (or only throw
-when the caller opted into strict behavior).
+**Impact:** Consistent with conventional serializer behavior; callers no
+longer need try/catch to handle a legitimate `null` payload.
 
 ---
 
-## 3. Numbers in the `object` fallback become strings — **Bug**
+## 3. Numbers in the `object` fallback become strings — **Bug** ✅ Fixed
 
-**Where:** `Deserialize.cs` → `ReadPrimitive` (the `Convert.ChangeType(raw, t)`
-last resort), and `DeserializeDynamic`/`Deserialize<object>` on untagged JSON.
+**Where:** `Deserialize.cs` → `ReadPrimitive`
+
+**Fixed in commit/change:** Added a `ReadJsonValueAsObject` helper that maps a
+raw `JsonElement` to its natural .NET type when the target is `object` (number
+→ `long`/`double`, `true`/`false` → `bool`, etc.), and `ReadPrimitive` now
+routes `object`-typed reads through it instead of `Convert.ChangeType`.
 
 **Repro:**
 
 ```csharp
-var r = Serializer.DeserializeDynamic("{\"a\":1}");
-// r["a"] is the *string* "1", not int 1
+var r = Serializer.DeserializeDynamic("{\"a\":1,\"b\":1.5,\"c\":true}");
+// r["a"] is long 1, r["b"] is double 1.5, r["c"] is bool true
 ```
 
-**Impact:** Dynamic deserialization of a plain JSON object silently changes
-numeric values to strings, breaking round-trip type fidelity for untagged data.
-
-**Suggested fix:** Preserve JSON value kinds (number → long/double, bool →
-bool) when the target is `object` instead of converting via `Convert.ChangeType`.
+**Impact:** Dynamic deserialization of a plain JSON object now preserves
+numeric and boolean value kinds, restoring round-trip type fidelity for
+untagged data.
 
 ---
 
@@ -248,8 +251,8 @@ hot paths.
 | # | Area | Kind | Severity |
 |---|------|------|----------|
 | 1 | `Serialize(object)` no root tag | Bug/Improvement | High |
-| 2 | `Deserialize<T>` throws on null | Bug | Medium |
-| 3 | Numbers become strings in `object` fallback | Bug | Medium |
+| 2 | `Deserialize<T>` throws on null | Bug ✅ Fixed | Medium |
+| 3 | Numbers become strings in `object` fallback | Bug ✅ Fixed | Medium |
 | 4 | Logging helpers are dead code | Improvement | Low |
 | 5 | Non-standard logger injection | Improvement | Low |
 | 6 | No circular-ref detection | Limitation | Low |

@@ -22,11 +22,11 @@ public class DeserializeTests
     }
 
     [Fact]
-    public void Deserialize_NullString_ThrowsNullResult()
+    public void Deserialize_NullString_ReturnsDefault()
     {
-        // The library throws when deserialization produces a null result
-        // rather than returning null.
-        Assert.Throws<InvalidOperationException>(() => Serializer.Deserialize<string?>("null"));
+        // A JSON null payload deserializes to null/default, not an exception.
+        var result = Serializer.Deserialize<string?>("null");
+        Assert.Null(result);
     }
 
     [Fact]
@@ -139,6 +139,16 @@ public class DeserializeTests
         Assert.IsType<Dictionary<string, object?>>(result);
         var dict = (Dictionary<string, object?>)result!;
         Assert.True(dict.ContainsKey("a"));
+    }
+
+    [Fact]
+    public void DeserializeDynamic_PlainNumber_StaysNumeric()
+    {
+        var result = Serializer.DeserializeDynamic("{\"a\":1,\"b\":1.5,\"c\":true}");
+        var dict = Assert.IsType<Dictionary<string, object?>>(result);
+        Assert.Equal(1L, dict["a"]);          // integer stays integral
+        Assert.Equal(1.5, dict["b"]);         // decimal stays a double
+        Assert.Equal(true, dict["c"]);        // bool stays bool
     }
 
     [Fact]

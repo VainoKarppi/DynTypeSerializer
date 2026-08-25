@@ -31,7 +31,6 @@ public static partial class Serializer
         }
 
         object? result = ReadNode(root, typeof(T));
-        if (result == null) throw new InvalidOperationException("Deserialization resulted in null.");
         return result is null ? default : (T)result;
     }
      
@@ -96,6 +95,11 @@ public static partial class Serializer
  
     private static object ReadPrimitive(JsonElement el, Type t)
     {
+        // When no concrete type is known, return the natural JSON value so
+        // numbers stay numbers (not strings), booleans stay booleans, etc.
+        if (t == typeof(object))
+            return ReadJsonValueAsObject(el)!;
+
         string raw = el.ValueKind == JsonValueKind.String
             ? el.GetString()!
             : el.GetRawText();
@@ -124,6 +128,25 @@ public static partial class Serializer
  
         // last resort
         return Convert.ChangeType(raw, t);
+    }
+
+    /// <summary>
+    /// Maps a raw <see cref="JsonElement"/> to its most natural .NET type when
+    /// the target type is <see cref="object"/> and no $t tag was present.
+    /// </summary>
+    private static object? ReadJsonValueAsObject(JsonElement el)
+    {
+        return el.ValueKind switch
+        {
+            JsonValueKind.String   => el.GetString(),
+            JsonValueKind.Number   => el.TryGetInt64(out var l) ? (object)l : el.GetDouble(),
+            JsonValueKind.True     => true,
+            JsonValueKind.False    => false,
+            JsonValueKind.Null     => null,
+            JsonValueKind.Object   => ReadObject(el, typeof(object)),
+            JsonValueKind.Array    => ReadList(el, typeof(List<object?>)),
+            _                      => el.GetRawText()
+        };
     }
  
     private static IDictionary ReadDict(JsonElement el, Type dictType)

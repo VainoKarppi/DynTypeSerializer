@@ -272,8 +272,11 @@ dotnet test tests/DynTypeSerializer.Tests -c Release
   `object` declared type — i.e. `Serialize<object>(value)` — which emits the
   `$t` tag. The non-generic `Serialize(value)` overload uses the actual runtime
   type as the declared type, so it does not tag the root value.
-- `Deserialize<T>` throws `InvalidOperationException("Deserialization resulted
-  in null.")` rather than returning `null` when the result is null.
+- `Deserialize<T>` returns `default(T)` (typically `null`) when the JSON value
+  is `null`, matching conventional serializer behavior.
+- When deserializing untagged JSON as `object` (e.g. via `DeserializeDynamic`),
+  numbers are preserved as `long`/`double` and booleans as `bool` rather than
+  being coerced to strings.
 - The internal level-specific logging helpers
   (`SerializerLogging.Debug/Info/Warning/Error`) are not part of the public
   API and are not currently exercised; the tests target the public
