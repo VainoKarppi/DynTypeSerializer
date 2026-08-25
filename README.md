@@ -125,6 +125,7 @@ string json = Serializer.Serialize(value, options);
 | `IncludeRootType` | `false` | Wraps the output in `{ "$r": <type>, "$v": <value> }` so the root type is discoverable (see `GetRootType`). |
 | `IncludeFullAssemblyInfo` | `false` | Uses full assembly-qualified names for type identifiers instead of short codes / full names. |
 | `WriteIndented` | `false` | Writes indented JSON. |
+| `MaxSerializationDepth` | `512` | Maximum nesting depth allowed during serialization. Throws an `InvalidOperationException` when exceeded, protecting against pathologically deep object graphs and stack overflow. |
 
 ## How it works
 
@@ -222,8 +223,10 @@ If no logger is configured, `NullLogger.Instance` is used (no-op).
   `Activator.CreateInstance` and populated via public setters; types without a
   parameterless constructor (or with read-only properties) may not round-trip
   fully.
-- **No circular reference detection** — self-referencing object graphs will
-  cause unbounded recursion.
+- **Circular reference detection** — self-referencing object graphs throw an
+  `InvalidOperationException` instead of recursing without bound, and a
+  maximum serialization depth guard prevents stack overflow on pathological
+  deep graphs.
 - **No support for `System.Object` graphs containing delegates, pointers,
   `IntPtr`, or other unrepresentable types** — these are not handled by the
   primitive encoder.

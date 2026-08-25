@@ -117,5 +117,6 @@ public class OptionsAndMetadataTests
         Assert.False(options.IncludeRootType);
         Assert.False(options.IncludeFullAssemblyInfo);
         Assert.False(options.WriteIndented);
+        Assert.Equal(512, options.MaxSerializationDepth);
     }
 }

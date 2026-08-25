@@ -2,6 +2,7 @@
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -82,6 +83,47 @@ public static partial class Serializer
     // ════════════════════════════════════════════════════════════════════════
  
     private static JsonNode? BuildNode(object? obj, Type declaredType, Options options)
+        => BuildNode(obj, declaredType, options, null, 0);
+
+    private static JsonNode? BuildNode(object? obj, Type declaredType, Options options,
+        HashSet<object>? visiting, int depth)
+    {
+        if (obj is null) return null;
+
+        // Guard against unbounded recursion from self-referencing object
+        // graphs. A visited-set detects true cycles; a depth cap catches
+        // pathological deep graphs that would otherwise overflow the stack.
+        if (depth > options.MaxSerializationDepth)
+            throw new InvalidOperationException(
+                "DynTypeSerializer: maximum serialization depth exceeded. " +
+                "The object graph is likely too deep or contains a cycle.");
+
+        // Only reference types can participate in a cycle.
+        if (!obj.GetType().IsValueType)
+        {
+            visiting ??= new HashSet<object>(ReferenceEqualityComparer.Instance);
+
+            if (!visiting.Add(obj))
+                throw new InvalidOperationException(
+                    $"DynTypeSerializer: circular reference detected while serializing " +
+                    $"an object of type '{obj.GetType().FullName}'. " +
+                    "The object graph contains a cycle that cannot be represented in JSON.");
+
+            try
+            {
+                return BuildNodeCore(obj, declaredType, options, visiting, depth);
+            }
+            finally
+            {
+                visiting.Remove(obj);
+            }
+        }
+
+        return BuildNodeCore(obj, declaredType, options, visiting, depth);
+    }
+
+    private static JsonNode? BuildNodeCore(object? obj, Type declaredType, Options options,
+        HashSet<object>? visiting, int depth)
     {
         if (obj is null) return null;
 
@@ -90,7 +132,7 @@ public static partial class Serializer
         bool needTag = NeedsTypeTag(actualType, declaredType);
         string? tag  = needTag ? GetTypeCode(actualType, options) : null;
 
-        JsonNode valueNode = BuildValueNode(obj, actualType, options);
+        JsonNode valueNode = BuildValueNode(obj, actualType, options, visiting, depth + 1);
 
         if (tag is null) return valueNode;
 
@@ -101,7 +143,8 @@ public static partial class Serializer
         };
     }
  
-    private static JsonNode BuildValueNode(object obj, Type actualType, Options options)
+    private static JsonNode BuildValueNode(object obj, Type actualType, Options options,
+        HashSet<object>? visiting, int depth)
     {
         // ── Primitives / value-type leaves ─────────────────────────────────
         if (IsPrimitiveLike(actualType))
@@ -109,14 +152,14 @@ public static partial class Serializer
 
         // ── Dictionary ──────────────────────────────────────────────────────
         if (obj is IDictionary dict)
-            return DictToNode(dict, actualType, options);
+            return DictToNode(dict, actualType, options, visiting, depth);
 
         // ── Enumerable (not string) ─────────────────────────────────────────
         if (obj is IEnumerable enumerable)
-            return EnumerableToNode(enumerable, actualType, options);
+            return EnumerableToNode(enumerable, actualType, options, visiting, depth);
 
         // ── Complex object (class / struct with properties) ─────────────────
-        return ObjectToNode(obj, actualType, options);
+        return ObjectToNode(obj, actualType, options, visiting, depth);
     }
  
     private static JsonNode PrimitiveToNode(object obj, Type t)
@@ -145,7 +188,8 @@ public static partial class Serializer
         return JsonValue.Create(obj)!;
     }
  
-    private static JsonNode DictToNode(IDictionary dict, Type actualType, Options options)
+    private static JsonNode DictToNode(IDictionary dict, Type actualType, Options options,
+        HashSet<object>? visiting, int depth)
     {
         Type keyType   = actualType.IsGenericType ? actualType.GetGenericArguments()[0] : typeof(string);
         Type valueType = actualType.IsGenericType ? actualType.GetGenericArguments()[1] : typeof(object);
@@ -156,7 +200,7 @@ public static partial class Serializer
             foreach (DictionaryEntry kv in dict)
             {
                 string key  = kv.Key?.ToString() ?? "null";
-                obj[key] = BuildNode(kv.Value, valueType, options);
+                obj[key] = BuildNode(kv.Value, valueType, options, visiting, depth);
             }
             return obj;
         }
@@ -166,15 +210,16 @@ public static partial class Serializer
         {
             var entry = new JsonObject
             {
-                ["$k"] = BuildNode(kv.Key, keyType, options),
-                ["$v"] = BuildNode(kv.Value, valueType, options)
+                ["$k"] = BuildNode(kv.Key, keyType, options, visiting, depth),
+                ["$v"] = BuildNode(kv.Value, valueType, options, visiting, depth)
             };
             array.Add(entry);
         }
         return array;
     }
  
-    private static JsonArray EnumerableToNode(IEnumerable enumerable, Type actualType, Options options)
+    private static JsonArray EnumerableToNode(IEnumerable enumerable, Type actualType, Options options,
+        HashSet<object>? visiting, int depth)
     {
         // Determine element type
         Type elemType = actualType.IsArray
@@ -185,11 +230,12 @@ public static partial class Serializer
  
         var arr = new JsonArray();
         foreach (object? item in enumerable)
-            arr.Add(BuildNode(item, elemType, options));
+            arr.Add(BuildNode(item, elemType, options, visiting, depth));
         return arr;
     }
  
-    private static JsonObject ObjectToNode(object obj, Type actualType, Serializer.Options options)
+    private static JsonObject ObjectToNode(object obj, Type actualType, Serializer.Options options,
+        HashSet<object>? visiting, int depth)
     {
         var node = new JsonObject();
         foreach (var prop in GetProperties(actualType))
@@ -200,7 +246,7 @@ public static partial class Serializer
             if (val is Type typeVal)
                 node[prop.Name] = JsonValue.Create(typeVal.FullName);
             else
-                node[prop.Name] = BuildNode(val, prop.PropertyType, options);
+                node[prop.Name] = BuildNode(val, prop.PropertyType, options, visiting, depth);
         }
         return node;
     }

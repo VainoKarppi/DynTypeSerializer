@@ -78,3 +78,36 @@ public class Car
     public string Make { get; set; } = string.Empty;
     public int Year { get; set; }
 }
+
+/// <summary>A node that can point to itself, forming a circular reference.</summary>
+public class Node
+{
+    public string Name { get; set; } = string.Empty;
+    public Node? Next { get; set; }
+}
+
+/// <summary>Two objects that reference each other, forming a cycle.</summary>
+public class A
+{
+    public string Value { get; set; } = string.Empty;
+    public B? B { get; set; }
+}
+
+public class B
+{
+    public string Value { get; set; } = string.Empty;
+    public A? A { get; set; }
+}
+
+/// <summary>A list that contains a reference to itself.</summary>
+public class SelfContainingList
+{
+    public List<object> Items { get; set; } = new();
+}
+
+/// <summary>A deep chain used to exercise the depth guard.</summary>
+public class ChainLink
+{
+    public string Id { get; set; } = string.Empty;
+    public ChainLink? Next { get; set; }
+}

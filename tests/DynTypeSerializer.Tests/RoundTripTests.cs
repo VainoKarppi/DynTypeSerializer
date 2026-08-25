@@ -133,8 +133,8 @@ public class RoundTripTests
     [Fact]
     public void RoundTrip_ObjectArray()
     {
-        object[] value = { 1, "two", 3.0, null, true };
-        var result = Serializer.Deserialize<object[]>(Serializer.Serialize(value));
+        object?[] value = { 1, "two", 3.0, null, true };
+        var result = Serializer.Deserialize<object?[]>(Serializer.Serialize(value));
         Assert.NotNull(result);
         Assert.Equal(value.Length, result!.Length);
         Assert.Equal(1, result[0]);

@@ -150,6 +150,17 @@ public static partial class Serializer
         /// The default is <see langword="false"/>.
         /// </value>
         public bool WriteIndented { get; set; } = false;
+
+        /// <summary>
+        /// Gets or sets the maximum nesting depth allowed during serialization.
+        /// </summary>
+        /// <value>
+        /// The maximum number of nested objects that can be serialized before
+        /// an <see cref="InvalidOperationException"/> is thrown. Protects
+        /// against pathological deep object graphs that would otherwise
+        /// overflow the stack. The default is <c>512</c>.
+        /// </value>
+        public int MaxSerializationDepth { get; set; } = 512;
     }
 
 
