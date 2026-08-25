@@ -21,7 +21,7 @@ internal static class BinaryDeserializer
         BinaryFormat.ReadAndValidateHeader(ref reader);
         var registry = new BinaryTypeRegistry();
 
-        object? result = ReadValue(reader, typeof(T), options, registry, 0);
+        object? result = ReadValue(ref reader, typeof(T), options, registry, 0);
         return result is null ? default : (T)result;
     }
 
@@ -30,20 +30,20 @@ internal static class BinaryDeserializer
         var reader = new BinaryReader(data);
         BinaryFormat.ReadAndValidateHeader(ref reader);
         var registry = new BinaryTypeRegistry();
-        return ReadValue(reader, typeof(object), options, registry, 0);
+        return ReadValue(ref reader, typeof(object), options, registry, 0);
     }
 
-    private static object? ReadValue(BinaryReader reader, Type declaredType,
+    private static object? ReadValue(ref BinaryReader reader, Type declaredType,
         Serializer.Options options, BinaryTypeRegistry registry, int depth)
     {
         if (depth > options.MaxSerializationDepth)
             throw new InvalidDataException("Binary payload exceeds the maximum nesting depth.");
 
         BinaryTypeCode code = reader.ReadTypeCode();
-        return ReadValueForCode(reader, code, declaredType, options, registry, depth);
+        return ReadValueForCode(ref reader, code, declaredType, options, registry, depth);
     }
 
-    private static object? ReadValueForCode(BinaryReader reader, BinaryTypeCode code, Type declaredType,
+    private static object? ReadValueForCode(ref BinaryReader reader, BinaryTypeCode code, Type declaredType,
         Serializer.Options options, BinaryTypeRegistry registry, int depth)
     {
         switch (code)
@@ -56,7 +56,7 @@ internal static class BinaryDeserializer
                 return false;
             case BinaryTypeCode.Int:
             case BinaryTypeCode.UInt:
-                return ReadInteger(reader, code, ResolveLeafType(declaredType));
+                return ReadInteger(ref reader, code, ResolveLeafType(declaredType));
             case BinaryTypeCode.Char:
                 return (char)reader.ReadVarUInt32();
             case BinaryTypeCode.Float:
@@ -64,17 +64,17 @@ internal static class BinaryDeserializer
             case BinaryTypeCode.Double:
                 return BitConverter.Int64BitsToDouble(reader.ReadInt64Fixed());
             case BinaryTypeCode.Decimal:
-                return ReadDecimal(reader);
+                return ReadDecimal(ref reader);
             case BinaryTypeCode.String:
-                return ReadStringValue(reader, ResolveLeafType(declaredType));
+                return ReadStringValue(ref reader, ResolveLeafType(declaredType));
             case BinaryTypeCode.Array:
-                return ReadList(reader, declaredType, options, registry, depth, isArray: true);
+                return ReadList(ref reader, declaredType, options, registry, depth, isArray: true);
             case BinaryTypeCode.List:
-                return ReadList(reader, declaredType, options, registry, depth, isArray: false);
+                return ReadList(ref reader, declaredType, options, registry, depth, isArray: false);
             case BinaryTypeCode.Dictionary:
-                return ReadDictionary(reader, declaredType, options, registry, depth);
+                return ReadDictionary(ref reader, declaredType, options, registry, depth);
             case BinaryTypeCode.Object:
-                return ReadObject(reader, declaredType, options, registry, depth);
+                return ReadObject(ref reader, declaredType, options, registry, depth);
             default:
                 throw new InvalidDataException($"Unknown binary type code 0x{(byte)code:X2}.");
         }
@@ -83,7 +83,7 @@ internal static class BinaryDeserializer
     private static Type ResolveLeafType(Type declaredType)
         => Nullable.GetUnderlyingType(declaredType) ?? declaredType;
 
-    private static object ReadInteger(BinaryReader reader, BinaryTypeCode code, Type targetType)
+    private static object ReadInteger(ref BinaryReader reader, BinaryTypeCode code, Type targetType)
     {
         if (code == BinaryTypeCode.Int)
         {
@@ -118,7 +118,7 @@ internal static class BinaryDeserializer
         return Convert.ChangeType(value, t);
     }
 
-    private static decimal ReadDecimal(BinaryReader reader)
+    private static decimal ReadDecimal(ref BinaryReader reader)
     {
         int lo = reader.ReadInt32Fixed();
         int mid = reader.ReadInt32Fixed();
@@ -127,7 +127,7 @@ internal static class BinaryDeserializer
         return new decimal(new[] { lo, mid, hi, flags });
     }
 
-    private static object ReadStringValue(BinaryReader reader, Type t)
+    private static object ReadStringValue(ref BinaryReader reader, Type t)
     {
         string raw = reader.ReadString();
         if (t == typeof(object)) return raw;
@@ -141,7 +141,7 @@ internal static class BinaryDeserializer
         return raw;
     }
 
-    private static object ReadDictionary(BinaryReader reader, Type dictType,
+    private static object ReadDictionary(ref BinaryReader reader, Type dictType,
         Serializer.Options options, BinaryTypeRegistry registry, int depth)
     {
         Type keyType = dictType.IsGenericType ? dictType.GetGenericArguments()[0] : typeof(string);
@@ -157,14 +157,14 @@ internal static class BinaryDeserializer
 
         for (int i = 0; i < count; i++)
         {
-            object? key = ReadValue(reader, keyType, options, registry, depth + 1);
-            object? value = ReadValue(reader, valueType, options, registry, depth + 1);
+            object? key = ReadValue(ref reader, keyType, options, registry, depth + 1);
+            object? value = ReadValue(ref reader, valueType, options, registry, depth + 1);
             dict[key!] = value;
         }
         return dict;
     }
 
-    private static object ReadList(BinaryReader reader, Type targetType,
+    private static object ReadList(ref BinaryReader reader, Type targetType,
         Serializer.Options options, BinaryTypeRegistry registry, int depth, bool isArray)
     {
         uint count = reader.ReadVarUInt32();
@@ -186,12 +186,11 @@ internal static class BinaryDeserializer
         {
             if (knownHomogeneous)
             {
-                // No per-element token; first byte may be Null token though.
-                items[i] = ReadHomogeneousElement(reader, elemType, registry);
+                items[i] = ReadHomogeneousElement(ref reader, elemType, registry);
             }
             else
             {
-                items[i] = ReadValue(reader, elemType, options, registry, depth + 1);
+                items[i] = ReadValue(ref reader, elemType, options, registry, depth + 1);
             }
         }
 
@@ -215,15 +214,8 @@ internal static class BinaryDeserializer
     /// the serializer omitted the per-element token. A leading Null token is
     /// still honored.
     /// </summary>
-    private static object? ReadHomogeneousElement(BinaryReader reader, Type elemType, BinaryTypeRegistry registry)
+    private static object? ReadHomogeneousElement(ref BinaryReader reader, Type elemType, BinaryTypeRegistry registry)
     {
-        // Peek: if the next byte is the Null token, consume it and return null.
-        // We cannot safely peek a span-based reader by index without copying the
-        // struct; use a dedicated null-check token read.
-        // Note: BinaryReader is a ref struct; we read via a sentinel approach
-        // by reading the token only if it equals Null. To avoid consuming a
-        // real value token, homogeneous elements are always primitive (no
-        // Object token), so a leading Null is unambiguous.
         if (reader.Remaining >= 1 && reader.PeekTypeCode() == BinaryTypeCode.Null)
         {
             reader.ReadTypeCode();
@@ -241,7 +233,7 @@ internal static class BinaryDeserializer
         if (elemType == typeof(byte)) return (byte)reader.ReadVarUInt64();
         if (elemType == typeof(float)) return BitConverter.Int32BitsToSingle(reader.ReadInt32Fixed());
         if (elemType == typeof(double)) return BitConverter.Int64BitsToDouble(reader.ReadInt64Fixed());
-        if (elemType == typeof(decimal)) return ReadDecimal(reader);
+        if (elemType == typeof(decimal)) return ReadDecimal(ref reader);
         if (elemType == typeof(DateTime)) return DateTime.Parse(reader.ReadString());
         if (elemType == typeof(TimeSpan)) return TimeSpan.Parse(reader.ReadString());
         if (elemType == typeof(Guid)) return Guid.Parse(reader.ReadString());
@@ -250,13 +242,13 @@ internal static class BinaryDeserializer
             $"Unsupported homogeneous element type '{elemType.FullName}' in binary collection.");
     }
 
-    private static object ReadObject(BinaryReader reader, Type declaredType,
+    private static object ReadObject(ref BinaryReader reader, Type declaredType,
         Serializer.Options options, BinaryTypeRegistry registry, int depth)
     {
         Type targetType = ResolveLeafType(declaredType);
 
         // Enums are encoded as Object token + type id + varint value.
-        if (targetType.IsEnum || (declaredType == typeof(object) && IsEnumEncoded(reader)))
+        if (targetType.IsEnum || (declaredType == typeof(object) && IsEnumEncoded(ref reader)))
         {
             uint typeId = reader.ReadVarUInt32();
             long value = reader.ReadVarInt64();
@@ -277,13 +269,12 @@ internal static class BinaryDeserializer
             object? propValue;
             if (prop.PropertyType == typeof(Type))
             {
-                // Type property: Object token (implicit) + string value.
                 string typeName = reader.ReadString();
                 propValue = string.IsNullOrEmpty(typeName) ? null : Type.GetType(typeName);
             }
             else
             {
-                propValue = ReadValue(reader, prop.PropertyType, options, registry, depth + 1);
+                propValue = ReadValue(ref reader, prop.PropertyType, options, registry, depth + 1);
             }
 
             if (propValue != null || !prop.PropertyType.IsValueType || Nullable.GetUnderlyingType(prop.PropertyType) != null)
@@ -302,7 +293,7 @@ internal static class BinaryDeserializer
     /// ambiguous. To keep it simple and correct for round-trips, boxed enums
     /// are NOT the focus here; typed enums are handled above.
     /// </summary>
-    private static bool IsEnumEncoded(BinaryReader reader) => false;
+    private static bool IsEnumEncoded(ref BinaryReader reader) => false;
 
     /// <summary>
     /// Guards against absurd collection/string counts in the payload that could
