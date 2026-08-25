@@ -39,6 +39,21 @@ public class RecordingLogger : ILogger
     public string CategoryName => _categoryName;
 }
 
+/// <summary>
+/// An <see cref="ILoggerFactory"/> that always returns the same
+/// <see cref="RecordingLogger"/>, so tests can capture the library's output.
+/// </summary>
+public class RecordingLoggerFactory : ILoggerFactory
+{
+    public RecordingLogger Logger { get; } = new("DynTypeSerializer");
+
+    public void AddProvider(ILoggerProvider provider) { }
+
+    public ILogger CreateLogger(string categoryName) => Logger;
+
+    public void Dispose() { }
+}
+
 /// <summary>A single captured log entry.</summary>
 public record LogEntry
 {

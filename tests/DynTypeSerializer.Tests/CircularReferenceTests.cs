@@ -14,7 +14,7 @@ public class CircularReferenceTests
         var node = new Node { Name = "root" };
         node.Next = node; // cycle back to itself
 
-        var ex = Assert.Throws<InvalidOperationException>(() => Serializer.Serialize(node));
+        var ex = Assert.Throws<InvalidOperationException>(() => { Serializer.SerializeToBytes(node); });
         Assert.Contains("circular", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -26,7 +26,7 @@ public class CircularReferenceTests
         a.B = b;
         b.A = a;
 
-        var ex = Assert.Throws<InvalidOperationException>(() => Serializer.Serialize(a));
+        var ex = Assert.Throws<InvalidOperationException>(() => { Serializer.SerializeToBytes(a); });
         Assert.Contains("circular", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -36,7 +36,7 @@ public class CircularReferenceTests
         var list = new SelfContainingList();
         list.Items.Add(list); // list contains itself
 
-        var ex = Assert.Throws<InvalidOperationException>(() => Serializer.Serialize(list));
+        var ex = Assert.Throws<InvalidOperationException>(() => { Serializer.SerializeToBytes(list); });
         Assert.Contains("circular", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -50,7 +50,7 @@ public class CircularReferenceTests
         node2.Next = node3;
 
         // Acyclic graph should serialize without a circular-reference error.
-        var json = Serializer.Serialize(node1);
+        var json = Serializer.SerializeToString(node1);
         Assert.Contains("\"Name\":\"1\"", json);
         Assert.Contains("\"Name\":\"2\"", json);
         Assert.Contains("\"Name\":\"3\"", json);
@@ -66,7 +66,7 @@ public class CircularReferenceTests
         parent.Items.Add(shared);
         parent.Items.Add(new { Link = shared });
 
-        var json = Serializer.Serialize(parent);
+        var json = Serializer.SerializeToString(parent);
         Assert.Contains("shared", json);
     }
 
@@ -84,7 +84,7 @@ public class CircularReferenceTests
 
         // A deep non-cyclic chain triggers the depth guard rather than a stack
         // overflow.
-        var ex = Assert.Throws<InvalidOperationException>(() => Serializer.Serialize(head));
+        var ex = Assert.Throws<InvalidOperationException>(() => { Serializer.SerializeToBytes(head); });
         Assert.Contains("depth", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -102,11 +102,11 @@ public class CircularReferenceTests
         }
 
         // Default limit (512) allows it.
-        _ = Serializer.Serialize(head);
+        _ = Serializer.SerializeToBytes(head);
 
         // A custom low limit rejects it.
         var options = new Serializer.Options { MaxSerializationDepth = 10 };
-        var ex = Assert.Throws<InvalidOperationException>(() => Serializer.Serialize(head, options));
+        var ex = Assert.Throws<InvalidOperationException>(() => { Serializer.SerializeToBytes(head, options); });
         Assert.Contains("depth", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 }

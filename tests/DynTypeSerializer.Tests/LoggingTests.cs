@@ -1,57 +1,87 @@
-using DynTypeSerializer.Logging;
 using DynTypeSerializer.Tests.TestDoubles;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace DynTypeSerializer.Tests;
 
 /// <summary>
-/// Tests for the public logging surface of <see cref="SerializerLogging"/>.
+/// Tests for the logging surface of <see cref="Serializer"/>.
 /// </summary>
 /// <remarks>
-/// The internal level-specific helpers (<c>Debug/Info/Warning/Error</c>) are
-/// library-internal and not part of the public contract; these tests exercise
-/// the public <see cref="SerializerLogging.Configure(ILogger)"/> entry point,
-/// including null/factory behavior and message emission.
+/// The library follows the standard <c>Microsoft.Extensions.Logging</c>
+/// pattern: hosts inject their <see cref="ILoggerFactory"/> via
+/// <see cref="Serializer.SetLoggerFactory(ILoggerFactory?)"/> and the library
+/// creates its own logger for the <c>"DynTypeSerializer"</c> category using
+/// the source-generated <c>[LoggerMessage]</c> methods.
 /// </remarks>
 public class LoggingTests
 {
     [Fact]
-    public void Configure_NullLogger_DoesNotThrow()
+    public void SetLoggerFactory_Null_DisablesLogging()
     {
-        // The library falls back to NullLogger.Instance when null is supplied,
-        // even though the parameter is not annotated nullable.
-        SerializerLogging.Configure(null!);
+        // Passing null falls back to a no-op logger factory.
+        Serializer.SetLoggerFactory(null);
+
+        // Serializing with the no-op logger must not throw.
+        _ = Serializer.SerializeToBytes(42);
     }
 
     [Fact]
-    public void Configure_WithRecordingLogger_EmitsInitializationMessage()
+    public void SetLoggerFactory_EmitsInitializationMessage()
     {
-        var logger = new RecordingLogger("DynTypeSerializer");
-        SerializerLogging.Configure(logger);
+        var factory = new RecordingLoggerFactory();
+        Serializer.SetLoggerFactory(factory);
 
-        Assert.Single(logger.Entries);
-        var entry = logger.Entries.First();
-        Assert.Equal(LogLevel.Information, entry.Level);
-        Assert.Contains("initialized", entry.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(factory.Logger.Entries, e => e.Level == LogLevel.Information);
     }
 
     [Fact]
-    public void Configure_WithNullLoggerInstance_DoesNotThrow()
+    public void Serialize_LogsAtDebug()
     {
-        // NullLogger.Instance is a valid ILogger and is used internally as the
-        // no-op fallback; configuring it must never throw.
-        SerializerLogging.Configure(NullLogger.Instance);
+        var factory = new RecordingLoggerFactory();
+        Serializer.SetLoggerFactory(factory);
+
+        _ = Serializer.SerializeToBytes(new { Name = "Alice" });
+
+        Assert.Contains(factory.Logger.Entries,
+            e => e.Level == LogLevel.Debug && e.Message.Contains("Serializing"));
     }
 
     [Fact]
-    public void Configure_MultipleTimes_EmitsEachTime()
+    public void Deserialize_LogsAtDebug()
     {
-        var logger = new RecordingLogger("DynTypeSerializer");
-        SerializerLogging.Configure(logger);
-        SerializerLogging.Configure(logger);
+        var factory = new RecordingLoggerFactory();
+        Serializer.SetLoggerFactory(factory);
 
-        Assert.Equal(2, logger.Entries.Count);
+        _ = Serializer.Deserialize<int>("42");
+
+        Assert.Contains(factory.Logger.Entries,
+            e => e.Level == LogLevel.Debug && e.Message.Contains("Deserializing"));
+    }
+
+    [Fact]
+    public void UnresolvedType_LogsWarning()
+    {
+        var factory = new RecordingLoggerFactory();
+        Serializer.SetLoggerFactory(factory);
+
+        Assert.Throws<InvalidOperationException>(
+            () => Serializer.Deserialize<object>("{\"$t\":\"X.Y.NotARealType\",\"$v\":1}"));
+
+        Assert.Contains(factory.Logger.Entries,
+            e => e.Level == LogLevel.Warning && e.Message.Contains("Unable to resolve type"));
+    }
+
+    [Fact]
+    public void ReadOnlyProperty_LogsWarning()
+    {
+        var factory = new RecordingLoggerFactory();
+        Serializer.SetLoggerFactory(factory);
+
+        _ = Serializer.Deserialize<Models.ReadOnlyModel>("{\"Id\":7}");
+
+        Assert.Contains(factory.Logger.Entries,
+            e => e.Level == LogLevel.Warning && e.Message.Contains("no public setter"));
     }
 }
+

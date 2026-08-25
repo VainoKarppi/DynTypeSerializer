@@ -1,24 +1,17 @@
-
 using System;
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
+namespace DynTypeSerializer.Serialization.Json;
 
-
-namespace DynTypeSerializer;
-
-
-public static partial class Serializer
+/// <summary>
+/// Internal JSON deserializer. Reads the type-preserving JSON format back into
+/// objects. Mirrors the traversal rules shared with the binary deserializer.
+/// </summary>
+internal static class JsonDeserializerCore
 {
-    // ════════════════════════════════════════════════════════════════════════
-    // PUBLIC METHODS
-    // ════════════════════════════════════════════════════════════════════════
-
-    /// <summary>Deserialize back to T, restoring all dynamic types exactly.</summary>
     public static T? Deserialize<T>(string json)
     {
         using var doc = JsonDocument.Parse(json);
@@ -26,84 +19,69 @@ public static partial class Serializer
 
         if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("$r", out var rProp) && root.TryGetProperty("$v", out var vProp))
         {
-            // Ignore the $r for type T; just deserialize the $v node
             return (T?)ReadNode(vProp, typeof(T));
         }
 
         object? result = ReadNode(root, typeof(T));
         return result is null ? default : (T)result;
     }
-     
-    /// <summary>Deserialize when the root type is unknown (returns object / boxed value).</summary>
+
     public static object? DeserializeDynamic(string json)
     {
         using var doc = JsonDocument.Parse(json);
         return ReadNode(doc.RootElement, typeof(object));
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-    // DESERIALIZATION
-    // ════════════════════════════════════════════════════════════════════════
- 
     private static object? ReadNode(JsonElement el, Type declaredType)
     {
         if (el.ValueKind == JsonValueKind.Null) return null;
- 
-        // Detect $t/$v envelope
+
         Type targetType = declaredType;
         JsonElement valueEl = el;
- 
+
         if (el.ValueKind == JsonValueKind.Object
             && el.TryGetProperty("$t", out var tProp)
             && el.TryGetProperty("$v", out var vProp))
         {
             string code = tProp.GetString()
                 ?? throw new InvalidOperationException("$t code was null.");
-            targetType = ResolveType(code);
+            targetType = SerializerCore.ResolveType(code);
             valueEl    = vProp;
         }
- 
+
         return ReadValue(valueEl, targetType);
     }
- 
+
     private static object? ReadValue(JsonElement el, Type targetType)
     {
         if (el.ValueKind == JsonValueKind.Null) return null;
- 
-        // Handle Nullable<T> → unwrap to T
+
         Type innerType = Nullable.GetUnderlyingType(targetType) ?? targetType;
- 
-        // ── Primitive / value-type ──────────────────────────────────────────
-        if (IsPrimitiveLike(innerType))
+
+        if (SerializerCore.IsPrimitiveLike(innerType))
             return ReadPrimitive(el, innerType);
- 
-        // ── Dictionary ──────────────────────────────────────────────────────
+
         if (typeof(IDictionary).IsAssignableFrom(innerType))
             return ReadDict(el, innerType);
- 
-        // ── Object with properties ──────────────────────────────────────────
+
         if (el.ValueKind == JsonValueKind.Object)
             return ReadObject(el, innerType);
- 
-        // ── Array / List ────────────────────────────────────────────────────
+
         if (el.ValueKind == JsonValueKind.Array)
             return ReadList(el, innerType);
- 
-        // ── Fallback: raw primitive read ────────────────────────────────────
+
         return ReadPrimitive(el, innerType);
     }
- 
+
     private static object ReadPrimitive(JsonElement el, Type t)
     {
-        // When no concrete type is known, return the natural JSON value so
-        // numbers stay numbers (not strings), booleans stay booleans, etc.
         if (t == typeof(object))
             return ReadJsonValueAsObject(el)!;
 
         string raw = el.ValueKind == JsonValueKind.String
             ? el.GetString()!
             : el.GetRawText();
- 
+
         if (t == typeof(string))         return el.GetString()!;
         if (t == typeof(bool))           return el.GetBoolean();
         if (t == typeof(byte))           return el.GetByte();
@@ -125,15 +103,10 @@ public static partial class Serializer
         if (t == typeof(Uri))            return new Uri(raw);
         if (t == typeof(Version))        return Version.Parse(raw);
         if (t.IsEnum)                    return Enum.Parse(t, raw);
- 
-        // last resort
+
         return Convert.ChangeType(raw, t);
     }
 
-    /// <summary>
-    /// Maps a raw <see cref="JsonElement"/> to its most natural .NET type when
-    /// the target type is <see cref="object"/> and no $t tag was present.
-    /// </summary>
     private static object? ReadJsonValueAsObject(JsonElement el)
     {
         return el.ValueKind switch
@@ -148,20 +121,18 @@ public static partial class Serializer
             _                      => el.GetRawText()
         };
     }
- 
+
     private static IDictionary ReadDict(JsonElement el, Type dictType)
     {
-        // Build a concrete Dictionary<TKey,TValue> or plain Hashtable
         Type keyType   = dictType.IsGenericType ? dictType.GetGenericArguments()[0] : typeof(string);
         Type valueType = dictType.IsGenericType ? dictType.GetGenericArguments()[1] : typeof(object);
- 
-        // If the declared type is an interface (IDictionary<,>), construct Dictionary<,>
+
         Type concrete = dictType.IsInterface || dictType.IsAbstract
             ? typeof(Dictionary<,>).MakeGenericType(keyType, valueType)
             : dictType;
- 
+
         var dict = (IDictionary)Activator.CreateInstance(concrete)!;
- 
+
         if (el.ValueKind == JsonValueKind.Object)
         {
             foreach (var prop in el.EnumerateObject())
@@ -192,10 +163,9 @@ public static partial class Serializer
 
         throw new InvalidOperationException($"Cannot deserialize dictionary from JSON token {el.ValueKind}.");
     }
- 
+
     private static object ReadObject(JsonElement el, Type targetType)
     {
-        // If targetType is object/interface and no $t, return a Dictionary<string,object>
         if (targetType == typeof(object) || targetType.IsInterface)
         {
             var fallback = new Dictionary<string, object?>();
@@ -203,13 +173,18 @@ public static partial class Serializer
                 fallback[prop.Name] = ReadNode(prop.Value, typeof(object));
             return fallback;
         }
- 
+
         object instance = Activator.CreateInstance(targetType)
             ?? throw new InvalidOperationException($"Cannot create instance of {targetType}");
- 
-        foreach (var prop in GetProperties(targetType))
+
+        foreach (var prop in SerializerCore.GetProperties(targetType))
         {
-            if (!prop.CanWrite) continue;
+            if (!prop.CanWrite)
+            {
+                Serializer.LogWarning(TypeCodeWarning.SkippedReadOnlyProperty,
+                    (prop.Name, targetType.FullName ?? targetType.Name));
+                continue;
+            }
             if (!el.TryGetProperty(prop.Name, out var val)) continue;
 
             object? propValue;
@@ -228,7 +203,7 @@ public static partial class Serializer
         }
         return instance;
     }
- 
+
     private static object ReadList(JsonElement el, Type targetType)
     {
         Type elemType = targetType.IsArray
@@ -236,28 +211,23 @@ public static partial class Serializer
             : targetType.IsGenericType
                 ? targetType.GetGenericArguments()[0]
                 : typeof(object);
- 
-        // Build a List<T> first, then convert to array if needed
+
         Type listType = typeof(List<>).MakeGenericType(elemType);
         var  list     = (IList)Activator.CreateInstance(listType)!;
- 
+
         foreach (var item in el.EnumerateArray())
             list.Add(ReadNode(item, elemType));
- 
+
         if (targetType.IsArray)
         {
             var arr = Array.CreateInstance(elemType, list.Count);
             list.CopyTo(arr, 0);
             return arr;
         }
- 
-        // If target is a concrete IList type (List<T>, etc.) return directly
+
         if (targetType.IsAssignableFrom(listType)) return list;
- 
-        // Otherwise try to construct the target type from the list
+
         return Activator.CreateInstance(targetType, list)
                ?? throw new InvalidOperationException($"Cannot construct {targetType} from list.");
     }
-
-
 }

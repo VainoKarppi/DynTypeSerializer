@@ -13,7 +13,7 @@ public class RoundTripTests
     public void RoundTrip_Int()
     {
         object value = 7;
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -21,7 +21,7 @@ public class RoundTripTests
     public void RoundTrip_String()
     {
         object value = "hello world";
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -29,7 +29,7 @@ public class RoundTripTests
     public void RoundTrip_Bool()
     {
         object value = true;
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -37,7 +37,7 @@ public class RoundTripTests
     public void RoundTrip_Double()
     {
         object value = 3.14159;
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -45,7 +45,7 @@ public class RoundTripTests
     public void RoundTrip_Decimal()
     {
         object value = 123456789.123456789m;
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -53,7 +53,7 @@ public class RoundTripTests
     public void RoundTrip_DateTime()
     {
         object value = new DateTime(1999, 12, 31, 23, 59, 58);
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -61,7 +61,7 @@ public class RoundTripTests
     public void RoundTrip_DateTimeOffset()
     {
         object value = new DateTimeOffset(2022, 6, 15, 10, 0, 0, TimeSpan.FromHours(3));
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -69,7 +69,7 @@ public class RoundTripTests
     public void RoundTrip_TimeSpan()
     {
         object value = new TimeSpan(2, 3, 4, 5, 6);
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -77,7 +77,7 @@ public class RoundTripTests
     public void RoundTrip_Guid()
     {
         object value = Guid.NewGuid();
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -85,7 +85,7 @@ public class RoundTripTests
     public void RoundTrip_Char()
     {
         object value = 'Z';
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -93,7 +93,7 @@ public class RoundTripTests
     public void RoundTrip_Uri()
     {
         object value = new Uri("https://example.com/path?q=1");
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -101,7 +101,7 @@ public class RoundTripTests
     public void RoundTrip_Version()
     {
         object value = new Version(1, 2, 3, 4);
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -109,7 +109,7 @@ public class RoundTripTests
     public void RoundTrip_Enum()
     {
         object value = Color.Red;
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 
@@ -117,7 +117,7 @@ public class RoundTripTests
     public void RoundTrip_NullableInt_HasValue()
     {
         int? value = 99;
-        int? result = Serializer.Deserialize<int?>(Serializer.Serialize(value));
+        int? result = Serializer.Deserialize<int?>(Serializer.SerializeToString(value));
         Assert.Equal(value, result);
     }
 
@@ -125,7 +125,7 @@ public class RoundTripTests
     public void RoundTrip_NullableInt_Null()
     {
         int? value = null;
-        string json = Serializer.Serialize((object?)value);
+        string json = Serializer.SerializeToString((object?)value);
         int? result = Serializer.Deserialize<int?>(json);
         Assert.Null(result);
     }
@@ -134,7 +134,7 @@ public class RoundTripTests
     public void RoundTrip_ObjectArray()
     {
         object?[] value = { 1, "two", 3.0, null, true };
-        var result = Serializer.Deserialize<object?[]>(Serializer.Serialize(value));
+        var result = Serializer.Deserialize<object?[]>(Serializer.SerializeToString(value));
         Assert.NotNull(result);
         Assert.Equal(value.Length, result!.Length);
         Assert.Equal(1, result[0]);
@@ -148,7 +148,7 @@ public class RoundTripTests
     public void RoundTrip_IntList()
     {
         var value = new List<int> { 1, 2, 3, 4 };
-        var result = Serializer.Deserialize<List<int>>(Serializer.Serialize(value));
+        var result = Serializer.Deserialize<List<int>>(Serializer.SerializeToString(value));
         Assert.Equal(value, result);
     }
 
@@ -156,7 +156,7 @@ public class RoundTripTests
     public void RoundTrip_StringListWithNulls()
     {
         var value = new List<string?> { "a", null, "c" };
-        var result = Serializer.Deserialize<List<string?>>(Serializer.Serialize(value));
+        var result = Serializer.Deserialize<List<string?>>(Serializer.SerializeToString(value));
         Assert.Equal(value, result);
     }
 
@@ -164,7 +164,7 @@ public class RoundTripTests
     public void RoundTrip_StringDictionary()
     {
         var value = new Dictionary<string, int> { ["x"] = 10, ["y"] = 20 };
-        var result = Serializer.Deserialize<Dictionary<string, int>>(Serializer.Serialize(value));
+        var result = Serializer.Deserialize<Dictionary<string, int>>(Serializer.SerializeToString(value));
         Assert.Equal(value, result);
     }
 
@@ -172,7 +172,7 @@ public class RoundTripTests
     public void RoundTrip_IntKeyedDictionary()
     {
         var value = new Dictionary<int, string> { [1] = "one", [2] = "two" };
-        var result = Serializer.Deserialize<Dictionary<int, string>>(Serializer.Serialize(value));
+        var result = Serializer.Deserialize<Dictionary<int, string>>(Serializer.SerializeToString(value));
         Assert.Equal(value, result);
     }
 
@@ -194,7 +194,7 @@ public class RoundTripTests
             Version = new Version(2, 0)
         };
 
-        var result = Serializer.Deserialize<Person>(Serializer.Serialize(person));
+        var result = Serializer.Deserialize<Person>(Serializer.SerializeToString(person));
         Assert.NotNull(result);
         Assert.Equal(person.Name, result!.Name);
         Assert.Equal(person.Age, result.Age);
@@ -213,7 +213,7 @@ public class RoundTripTests
     public void RoundTrip_PolymorphicAsObject()
     {
         object value = new Dog { Name = "Rex", Legs = 4 };
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.IsType<Dog>(result);
         var dog = (Dog)result!;
         Assert.Equal("Rex", dog.Name);
@@ -224,7 +224,7 @@ public class RoundTripTests
     public void RoundTrip_PolymorphicViaBaseType()
     {
         Animal value = new Cat { Name = "Mia", LivesNine = true };
-        var json = Serializer.Serialize<Animal>(value);
+        var json = Serializer.SerializeToString<Animal>(value);
         var result = Serializer.Deserialize<Animal>(json);
         Assert.IsType<Cat>(result);
         var cat = (Cat)result!;
@@ -245,7 +245,7 @@ public class RoundTripTests
             }
         };
 
-        var result = Serializer.Deserialize<Garage>(Serializer.Serialize(garage));
+        var result = Serializer.Deserialize<Garage>(Serializer.SerializeToString(garage));
         Assert.NotNull(result);
         Assert.Equal("Downtown", result!.Location);
         Assert.Equal(2, result.Cars.Count);
@@ -257,7 +257,7 @@ public class RoundTripTests
     public void RoundTrip_TypeProperty()
     {
         var holder = new TypeHolder { Type = typeof(string), Label = "text" };
-        var result = Serializer.Deserialize<TypeHolder>(Serializer.Serialize(holder));
+        var result = Serializer.Deserialize<TypeHolder>(Serializer.SerializeToString(holder));
         Assert.NotNull(result);
         Assert.Equal(typeof(string), result!.Type);
         Assert.Equal("text", result.Label);
@@ -268,7 +268,7 @@ public class RoundTripTests
     {
         // Round-trip "O" format retains sub-second precision.
         object value = new DateTime(2023, 1, 1, 12, 34, 56, 789);
-        var result = Serializer.Deserialize<object>(Serializer.Serialize<object>(value));
+        var result = Serializer.Deserialize<object>(Serializer.SerializeToString<object>(value));
         Assert.Equal(value, result);
     }
 }

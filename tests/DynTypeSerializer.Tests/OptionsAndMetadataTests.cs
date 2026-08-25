@@ -13,14 +13,14 @@ public class OptionsAndMetadataTests
     [Fact]
     public void ContainsRootType_WithRootTag_ReturnsTrue()
     {
-        string json = Serializer.Serialize(new Person(), new Serializer.Options { IncludeRootType = true });
+        string json = Serializer.SerializeToString(new Person(), new Serializer.Options { IncludeRootType = true });
         Assert.True(Serializer.ContainsRootType(json));
     }
 
     [Fact]
     public void ContainsRootType_WithoutRootTag_ReturnsFalse()
     {
-        string json = Serializer.Serialize(new Person());
+        string json = Serializer.SerializeToString(new Person());
         Assert.False(Serializer.ContainsRootType(json));
     }
 
@@ -41,7 +41,7 @@ public class OptionsAndMetadataTests
     [Fact]
     public void GetRootType_WithRootTag_ReturnsType()
     {
-        string json = Serializer.Serialize(new Person(), new Serializer.Options { IncludeRootType = true });
+        string json = Serializer.SerializeToString(new Person(), new Serializer.Options { IncludeRootType = true });
         Type? rootType = Serializer.GetRootType(json);
         Assert.Equal(typeof(Person), rootType);
     }
@@ -49,7 +49,7 @@ public class OptionsAndMetadataTests
     [Fact]
     public void GetRootType_WithoutRootTag_ReturnsObject()
     {
-        string json = Serializer.Serialize(new Person());
+        string json = Serializer.SerializeToString(new Person());
         Type? rootType = Serializer.GetRootType(json);
         Assert.Equal(typeof(object), rootType);
     }
@@ -65,7 +65,7 @@ public class OptionsAndMetadataTests
     public void IncludeRootType_WrapsOutputInEnvelope()
     {
         var person = new Person { Name = "Ada" };
-        string json = Serializer.Serialize(person, new Serializer.Options { IncludeRootType = true });
+        string json = Serializer.SerializeToString(person, new Serializer.Options { IncludeRootType = true });
         using var doc = JsonDocument.Parse(json);
         Assert.True(doc.RootElement.TryGetProperty("$r", out var r));
         Assert.True(doc.RootElement.TryGetProperty("$v", out _));
@@ -75,8 +75,8 @@ public class OptionsAndMetadataTests
     [Fact]
     public void WriteIndented_ProducesMultilineJson()
     {
-        string compact = Serializer.Serialize(new Person { Name = "x" });
-        string indented = Serializer.Serialize(new Person { Name = "x" }, new Serializer.Options { WriteIndented = true });
+        string compact = Serializer.SerializeToString(new Person { Name = "x" });
+        string indented = Serializer.SerializeToString(new Person { Name = "x" }, new Serializer.Options { WriteIndented = true });
         Assert.DoesNotContain("\n", compact);
         Assert.Contains("\n", indented);
     }
@@ -85,7 +85,7 @@ public class OptionsAndMetadataTests
     public void IncludeFullAssemblyInfo_UsesAssemblyQualifiedName()
     {
         object value = new Person { Name = "Ada" };
-        string json = Serializer.Serialize<object>(value, new Serializer.Options { IncludeFullAssemblyInfo = true });
+        string json = Serializer.SerializeToString<object>(value, new Serializer.Options { IncludeFullAssemblyInfo = true });
         // Full assembly-qualified name includes a comma + assembly.
         Assert.Contains(typeof(Person).AssemblyQualifiedName!, json);
     }
@@ -94,7 +94,7 @@ public class OptionsAndMetadataTests
     public void IncludeFullAssemblyInfo_StillRoundTrips()
     {
         object value = new Dog { Name = "Rex", Legs = 4 };
-        string json = Serializer.Serialize<object>(value, new Serializer.Options { IncludeFullAssemblyInfo = true });
+        string json = Serializer.SerializeToString<object>(value, new Serializer.Options { IncludeFullAssemblyInfo = true });
         var result = Serializer.Deserialize<object>(json);
         Assert.IsType<Dog>(result);
     }
@@ -103,7 +103,7 @@ public class OptionsAndMetadataTests
     public void RootTypeTag_DoesNotAffectDeserializeOfTypedValue()
     {
         var person = new Person { Name = "Grace", Age = 42 };
-        string json = Serializer.Serialize(person, new Serializer.Options { IncludeRootType = true });
+        string json = Serializer.SerializeToString(person, new Serializer.Options { IncludeRootType = true });
         var result = Serializer.Deserialize<Person>(json);
         Assert.NotNull(result);
         Assert.Equal("Grace", result!.Name);

@@ -1,284 +1,87 @@
 
-using System;
-using System.Collections;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Reflection;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-
-
+using DynTypeSerializer.Serialization;
+using DynTypeSerializer.Serialization.Binary;
+using DynTypeSerializer.Serialization.Json;
 
 namespace DynTypeSerializer;
-
 
 public static partial class Serializer
 {
     // ════════════════════════════════════════════════════════════════════════
-    // PUBLIC METHODS
+    // PUBLIC METHODS — JSON (string)
     // ════════════════════════════════════════════════════════════════════════
     /// <summary>Serialize any object to a type-preserving JSON string.</summary>
-    public static string Serialize(object? obj, Options? options = null)
+    public static string SerializeToString(object? obj, Options? options = null)
     {
         options ??= new Options();
-
-        // Create a fresh options instance
-        var jsonOpts = new JsonSerializerOptions
-        {
-            TypeInfoResolver = new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver(),
-            WriteIndented = options.WriteIndented
-        };
-
-        JsonNode? node = BuildNode(obj, typeof(object), options);
-
-        if (node is null) return "null";
-
-        if (options.IncludeRootType && obj != null)
-        {
-            string rootType = GetTypeCode(obj.GetType(), options);
-            var rootWrapper = new JsonObject
-            {
-                ["$r"] = JsonValue.Create(rootType),
-                ["$v"] = node
-            };
-            return rootWrapper.ToJsonString(jsonOpts);
-        }
-
-        return node.ToJsonString(jsonOpts);
+        LogSerialize(_logger, obj is null ? "null" : (obj.GetType().FullName ?? obj.GetType().Name));
+        return JsonSerializerCore.Serialize(obj, options);
     }
- 
+
     /// <summary>
-    /// Serialize with a known declared type (suppresses $t when runtime == declared).
-    /// Use this when the static type is known at the call site.
+    /// Serialize with a known declared type to a type-preserving JSON string.
     /// </summary>
-    public static string Serialize<T>(T obj, Options? options = null)
+    public static string SerializeToString<T>(T obj, Options? options = null)
     {
         options ??= new Options();
+        LogSerialize(_logger, typeof(T).FullName ?? typeof(T).Name);
+        return JsonSerializerCore.Serialize(obj, options);
+    }
 
-        var jsonOpts = new JsonSerializerOptions
-        {
-            TypeInfoResolver = new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver(),
-            WriteIndented = options.WriteIndented
-        };
+    /// <summary>Deserialize JSON back to T, restoring all dynamic types.</summary>
+    public static T? Deserialize<T>(string json, Options? options = null)
+    {
+        options ??= new Options();
+        LogDeserialize(_logger, typeof(T).FullName ?? typeof(T).Name);
+        return JsonDeserializerCore.Deserialize<T>(json);
+    }
 
-        JsonNode? node = BuildNode(obj, typeof(T), options);
-        if (node is null) return "null";
-
-        if (options.IncludeRootType && obj != null)
-        {
-            string rootType = GetTypeCode(obj.GetType(), options);
-            var rootWrapper = new JsonObject
-            {
-                ["$r"] = JsonValue.Create(rootType),
-                ["$v"] = node
-            };
-            return rootWrapper.ToJsonString(jsonOpts);
-        }
-
-        return node.ToJsonString(jsonOpts);
+    /// <summary>Deserialize JSON when the root type is unknown (returns object / boxed value).</summary>
+    public static object? DeserializeDynamic(string json, Options? options = null)
+    {
+        options ??= new Options();
+        LogDeserialize(_logger, "dynamic");
+        return JsonDeserializerCore.DeserializeDynamic(json);
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // SERIALIZATION
+    // PUBLIC METHODS — BINARY (byte[])
     // ════════════════════════════════════════════════════════════════════════
- 
-    private static JsonNode? BuildNode(object? obj, Type declaredType, Options options)
-        => BuildNode(obj, declaredType, options, null, 0);
-
-    private static JsonNode? BuildNode(object? obj, Type declaredType, Options options,
-        HashSet<object>? visiting, int depth)
+    /// <summary>Serialize any object to the compact binary format.</summary>
+    public static byte[] SerializeToBytes(object? obj, Options? options = null)
     {
-        if (obj is null) return null;
-
-        // Guard against unbounded recursion from self-referencing object
-        // graphs. A visited-set detects true cycles; a depth cap catches
-        // pathological deep graphs that would otherwise overflow the stack.
-        if (depth > options.MaxSerializationDepth)
-            throw new InvalidOperationException(
-                "DynTypeSerializer: maximum serialization depth exceeded. " +
-                "The object graph is likely too deep or contains a cycle.");
-
-        // Only reference types can participate in a cycle.
-        if (!obj.GetType().IsValueType)
-        {
-            visiting ??= new HashSet<object>(ReferenceEqualityComparer.Instance);
-
-            if (!visiting.Add(obj))
-                throw new InvalidOperationException(
-                    $"DynTypeSerializer: circular reference detected while serializing " +
-                    $"an object of type '{obj.GetType().FullName}'. " +
-                    "The object graph contains a cycle that cannot be represented in JSON.");
-
-            try
-            {
-                return BuildNodeCore(obj, declaredType, options, visiting, depth);
-            }
-            finally
-            {
-                visiting.Remove(obj);
-            }
-        }
-
-        return BuildNodeCore(obj, declaredType, options, visiting, depth);
+        options ??= new Options();
+        LogSerialize(_logger, obj is null ? "null" : (obj.GetType().FullName ?? obj.GetType().Name));
+        return BinarySerializer.Serialize(obj, options);
     }
 
-    private static JsonNode? BuildNodeCore(object? obj, Type declaredType, Options options,
-        HashSet<object>? visiting, int depth)
+    /// <summary>Serialize with a known declared type to the compact binary format.</summary>
+    public static byte[] SerializeToBytes<T>(T obj, Options? options = null)
     {
-        if (obj is null) return null;
-
-        Type actualType = obj.GetType();
-
-        bool needTag = NeedsTypeTag(actualType, declaredType);
-        string? tag  = needTag ? GetTypeCode(actualType, options) : null;
-
-        JsonNode valueNode = BuildValueNode(obj, actualType, options, visiting, depth + 1);
-
-        if (tag is null) return valueNode;
-
-        return new JsonObject
-        {
-            ["$t"] = JsonValue.Create(tag),
-            ["$v"] = valueNode,
-        };
-    }
- 
-    private static JsonNode BuildValueNode(object obj, Type actualType, Options options,
-        HashSet<object>? visiting, int depth)
-    {
-        // ── Primitives / value-type leaves ─────────────────────────────────
-        if (IsPrimitiveLike(actualType))
-            return PrimitiveToNode(obj, actualType);
-
-        // ── Dictionary ──────────────────────────────────────────────────────
-        if (obj is IDictionary dict)
-            return DictToNode(dict, actualType, options, visiting, depth);
-
-        // ── Enumerable (not string) ─────────────────────────────────────────
-        if (obj is IEnumerable enumerable)
-            return EnumerableToNode(enumerable, actualType, options, visiting, depth);
-
-        // ── Complex object (class / struct with properties) ─────────────────
-        return ObjectToNode(obj, actualType, options, visiting, depth);
-    }
- 
-    private static JsonNode PrimitiveToNode(object obj, Type t)
-    {
-        // Types that need string representation (not natively JSON)
-        if (t == typeof(TimeSpan)  || t == typeof(TimeSpan?))
-            return JsonValue.Create(((TimeSpan)obj).ToString("c"))!;
-        if (t == typeof(DateTime)  || t == typeof(DateTime?))
-            return JsonValue.Create(((DateTime)obj).ToString("O"))!;
-        if (t == typeof(DateTimeOffset) || t == typeof(DateTimeOffset?))
-            return JsonValue.Create(((DateTimeOffset)obj).ToString("O"))!;
-        if (t == typeof(Guid)      || t == typeof(Guid?))
-            return JsonValue.Create(((Guid)obj).ToString())!;
-        if (t == typeof(char)      || t == typeof(char?))
-            return JsonValue.Create(obj.ToString())!;
-        if (t == typeof(decimal)   || t == typeof(decimal?))
-            return JsonValue.Create(obj.ToString())!;      // avoid float precision loss
-        if (t == typeof(Uri))
-            return JsonValue.Create(((Uri)obj).ToString())!;
-        if (t == typeof(Version))
-            return JsonValue.Create(((Version)obj).ToString())!;
-        if (t.IsEnum)
-            return JsonValue.Create(obj.ToString())!;
- 
-        // Natively supported: bool, byte, sbyte, short, ushort, int, uint, long, ulong, float, double, string
-        return JsonValue.Create(obj)!;
-    }
- 
-    private static JsonNode DictToNode(IDictionary dict, Type actualType, Options options,
-        HashSet<object>? visiting, int depth)
-    {
-        Type keyType   = actualType.IsGenericType ? actualType.GetGenericArguments()[0] : typeof(string);
-        Type valueType = actualType.IsGenericType ? actualType.GetGenericArguments()[1] : typeof(object);
-
-        if (keyType == typeof(string))
-        {
-            var obj = new JsonObject();
-            foreach (DictionaryEntry kv in dict)
-            {
-                string key  = kv.Key?.ToString() ?? "null";
-                obj[key] = BuildNode(kv.Value, valueType, options, visiting, depth);
-            }
-            return obj;
-        }
-
-        var array = new JsonArray();
-        foreach (DictionaryEntry kv in dict)
-        {
-            var entry = new JsonObject
-            {
-                ["$k"] = BuildNode(kv.Key, keyType, options, visiting, depth),
-                ["$v"] = BuildNode(kv.Value, valueType, options, visiting, depth)
-            };
-            array.Add(entry);
-        }
-        return array;
-    }
- 
-    private static JsonArray EnumerableToNode(IEnumerable enumerable, Type actualType, Options options,
-        HashSet<object>? visiting, int depth)
-    {
-        // Determine element type
-        Type elemType = actualType.IsArray
-            ? actualType.GetElementType()!
-            : actualType.IsGenericType
-                ? actualType.GetGenericArguments()[0]
-                : typeof(object);
- 
-        var arr = new JsonArray();
-        foreach (object? item in enumerable)
-            arr.Add(BuildNode(item, elemType, options, visiting, depth));
-        return arr;
-    }
- 
-    private static JsonObject ObjectToNode(object obj, Type actualType, Serializer.Options options,
-        HashSet<object>? visiting, int depth)
-    {
-        var node = new JsonObject();
-        foreach (var prop in GetProperties(actualType))
-        {
-            object? val = prop.GetValue(obj);
-
-            // Special handling for Type properties
-            if (val is Type typeVal)
-                node[prop.Name] = JsonValue.Create(typeVal.FullName);
-            else
-                node[prop.Name] = BuildNode(val, prop.PropertyType, options, visiting, depth);
-        }
-        return node;
+        options ??= new Options();
+        LogSerialize(_logger, typeof(T).FullName ?? typeof(T).Name);
+        return BinarySerializer.Serialize(obj, options);
     }
 
-    
-    /// <summary>
-    /// Should we emit a $t tag?
-    /// Yes when:
-    ///   - declared type is object, interface, or abstract (deserializer has no concrete type)
-    ///   - runtime type differs from the declared type (polymorphic assignment)
-    /// </summary>
-    private static bool NeedsTypeTag(Type actualType, Type declaredType)
+    /// <summary>Deserialize compact binary data back to T.</summary>
+    public static T? Deserialize<T>(byte[] data, Options? options = null)
+        => Deserialize<T>((ReadOnlySpan<byte>)data, options);
+
+    /// <summary>Deserialize compact binary data from a span back to T.</summary>
+    public static T? Deserialize<T>(ReadOnlySpan<byte> data, Options? options = null)
     {
-        if (declaredType == typeof(object)) return true;
-        if (declaredType.IsInterface) return true;
-        if (declaredType.IsAbstract) return true;
-
-        // Include tag if runtime type differs from declared type
-        if (actualType != declaredType) return true;
-
-        return false;
+        options ??= new Options();
+        LogDeserialize(_logger, typeof(T).FullName ?? typeof(T).Name);
+        return BinaryDeserializer.Deserialize<T>(data, options);
     }
 
-    private static string GetTypeCode(Type t, Options? options = null)
+    /// <summary>Deserialize compact binary data when the root type is unknown.</summary>
+    public static object? DeserializeDynamic(byte[] data, Options? options = null)
     {
-        if (options?.IncludeFullAssemblyInfo == true)
-            return t.AssemblyQualifiedName ?? t.FullName ?? t.Name;
-
-        if (TypeToCode.TryGetValue(t, out var code))
-            return code;
-
-        // Default: strip assembly
-        return t.FullName ?? t.Name;
+        options ??= new Options();
+        LogDeserialize(_logger, "dynamic");
+        return BinaryDeserializer.DeserializeDynamic(data, options);
     }
 }
+
+

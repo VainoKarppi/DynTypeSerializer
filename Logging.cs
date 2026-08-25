@@ -1,46 +1,93 @@
-using System;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace DynTypeSerializer.Logging;
+namespace DynTypeSerializer;
 
-/// <summary>
-/// Provides logging for the DynTypeSerializer library.
-/// </summary>
-/// <remarks>
-/// Hosts can call <see cref="Configure(ILogger)"/> to provide their own logger.
-/// If no logger is configured, <see cref="NullLogger.Instance"/> is used.
-/// </remarks>
-public static class SerializerLogging
+public static partial class Serializer
 {
-    private static ILogger _logger = NullLogger.Instance;
+    // ════════════════════════════════════════════════════════════════════════
+    // LOGGING
+    // ════════════════════════════════════════════════════════════════════════
+
+    // The source-generated log methods below resolve against this field. It
+    // defaults to a no-op logger so logging stays disabled until the host
+    // supplies an ILoggerFactory.
+    private static ILogger _logger =
+        NullLoggerFactory.Instance.CreateLogger("DynTypeSerializer");
 
     /// <summary>
-    /// Configures the logging facade with the specified logger.
+    /// Configures the <see cref="ILoggerFactory"/> used to emit all
+    /// DynTypeSerializer log messages.
     /// </summary>
-    /// <param name="logger">
-    /// The logger to use for subsequent DynTypeSerializer log messages.
-    /// If <see langword="null"/> is supplied, logging falls back to
-    /// <see cref="NullLogger.Instance"/>.
+    /// <remarks>
+    /// <para>
+    /// Call this once at application startup, passing the factory the host is
+    /// already using. The factory is the standard
+    /// <c>Microsoft.Extensions.Logging</c> injection point: the library creates
+    /// its own logger for the <c>"DynTypeSerializer"</c> category while the host
+    /// retains full control over providers, levels, and filters.
+    /// </para>
+    /// <para>
+    /// Typical usage in a host that has an <see cref="ILoggerFactory"/> (for
+    /// example, resolved from dependency injection):
+    /// <code>Serializer.SetLoggerFactory(loggerFactory);</code>
+    /// </para>
+    /// </remarks>
+    /// <param name="loggerFactory">
+    /// The host's <see cref="ILoggerFactory"/>. Pass <see langword="null"/>
+    /// to disable logging; the default is a no-op logger.
     /// </param>
-    public static void Configure(ILogger logger)
+    public static void SetLoggerFactory(ILoggerFactory? loggerFactory)
     {
-        _logger = logger ?? NullLogger.Instance;
-        _logger.LogInformation("DynTypeSerializer logging initialized.");
+        _logger = (loggerFactory ?? NullLoggerFactory.Instance)
+            .CreateLogger("DynTypeSerializer");
+
+        LogLoggingInitialized(_logger);
     }
 
-    internal static void Debug(string? message)
-        => _logger.LogDebug("{Message}", message);
+    // ── Log message definitions ────────────────────────────────────────────
+    // These use the LoggerMessage source generator: high-performance,
+    // allocation-free when the level is disabled, and AOT-compatible.
 
-    internal static void Info(string? message)
-        => _logger.LogInformation("{Message}", message);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information,
+        Message = "DynTypeSerializer logging initialized.")]
+    private static partial void LogLoggingInitialized(ILogger logger);
 
-    internal static void Warning(string? message)
-        => _logger.LogWarning("{Message}", message);
+    [LoggerMessage(EventId = 10, Level = LogLevel.Debug,
+        Message = "Serializing object of runtime type {RuntimeType}.")]
+    private static partial void LogSerialize(ILogger logger, string runtimeType);
 
-    internal static void Error(string? message)
-        => _logger.LogError("{Message}", message);
+    [LoggerMessage(EventId = 11, Level = LogLevel.Debug,
+        Message = "Deserializing JSON with declared type {DeclaredType}.")]
+    private static partial void LogDeserialize(ILogger logger, string declaredType);
 
-    internal static void Error(Exception ex, string? message = null)
-        => _logger.LogError(ex, "{Message}", message ?? ex.Message);
+    [LoggerMessage(EventId = 20, Level = LogLevel.Warning,
+        Message = "Unable to resolve type '{TypeCode}' during deserialization.")]
+    private static partial void LogUnresolvedType(ILogger logger, string typeCode);
+
+    [LoggerMessage(EventId = 21, Level = LogLevel.Warning,
+        Message = "Property '{Property}' on type '{Type}' was skipped because it has no public setter.")]
+    private static partial void LogSkippedReadOnlyProperty(ILogger logger, string property, string type);
+
+    // ════════════════════════════════════════════════════════════════════════
+    // INTERNAL FACADE for the Json/Binary core classes
+    // ════════════════════════════════════════════════════════════════════════
+    internal static void LogWarning(TypeCodeWarning code, (string, string) data)
+    {
+        switch (code)
+        {
+            case TypeCodeWarning.UnresolvedType:
+                LogUnresolvedType(_logger, data.Item1);
+                break;
+            case TypeCodeWarning.SkippedReadOnlyProperty:
+                LogSkippedReadOnlyProperty(_logger, data.Item1, data.Item2);
+                break;
+        }
+    }
+}
+
+internal enum TypeCodeWarning
+{
+    UnresolvedType,
+    SkippedReadOnlyProperty
 }

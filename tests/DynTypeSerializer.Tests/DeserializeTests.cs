@@ -61,7 +61,7 @@ public class DeserializeTests
     public void Deserialize_TaggedDateTime_RestoresValue()
     {
         var dt = new DateTime(2021, 3, 4, 5, 6, 7);
-        string json = Serializer.Serialize<object>(dt);
+        string json = Serializer.SerializeToString<object>(dt);
         var result = Serializer.Deserialize<object>(json);
         Assert.Equal(dt, result);
     }
@@ -70,7 +70,7 @@ public class DeserializeTests
     public void Deserialize_TaggedGuid_RestoresValue()
     {
         var guid = Guid.NewGuid();
-        string json = Serializer.Serialize<object>(guid);
+        string json = Serializer.SerializeToString<object>(guid);
         var result = Serializer.Deserialize<object>(json);
         Assert.Equal(guid, result);
     }
@@ -78,7 +78,7 @@ public class DeserializeTests
     [Fact]
     public void Deserialize_TaggedEnum_RestoresEnum()
     {
-        var enumJson = Serializer.Serialize<object>(Color.Blue);
+        var enumJson = Serializer.SerializeToString<object>(Color.Blue);
         var result = Serializer.Deserialize<object>(enumJson);
         Assert.Equal(Color.Blue, result);
     }
@@ -154,7 +154,7 @@ public class DeserializeTests
     [Fact]
     public void DeserializeDynamic_TaggedValue_RestoresBoxedType()
     {
-        string json = Serializer.Serialize<object>(42);
+        string json = Serializer.SerializeToString<object>(42);
         var result = Serializer.DeserializeDynamic(json);
         Assert.Equal(42, result);
     }
@@ -171,8 +171,7 @@ public class DeserializeTests
     [Fact]
     public void Deserialize_UnknownType_Throws()
     {
-        string json = "{\"$t\":\"X.Y.NotARealType\",\"$v\":1}";
-        Assert.Throws<InvalidOperationException>(() => Serializer.Deserialize<object>(json));
+        Assert.Throws<InvalidOperationException>(() => Serializer.Deserialize<object>("{\"$t\":\"X.Y.NotARealType\",\"$v\":1}"));
     }
 
     [Fact]
@@ -184,7 +183,7 @@ public class DeserializeTests
     [Fact]
     public void Deserialize_ReadOnlyProperty_IgnoredOnRead()
     {
-        string json = Serializer.Serialize(new ReadOnlyModel { Id = 9 });
+        string json = Serializer.SerializeToString(new ReadOnlyModel { Id = 9 });
         var model = Serializer.Deserialize<ReadOnlyModel>(json);
         Assert.NotNull(model);
         Assert.Equal(9, model!.Id);
