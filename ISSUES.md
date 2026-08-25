@@ -2,7 +2,7 @@
 
 This file catalogs issues and behavioral observations found while building out
 the xUnit test suite (`tests/DynTypeSerializer.Tests`) and reviewing the
-library code. The test suite currently passes (90/90); most entries below are
+library code. The test suite currently passes (97/97); most entries below are
 behavioral quirks, non-standard patterns, or latent bugs that the tests either
 document or highlight — not necessarily failing tests.
 
@@ -45,19 +45,7 @@ which matters given `<IsAotCompatible>true</IsAotCompatible>`).
 
 ---
 
-## 3. No circular-reference detection — **Limitation**
-
-**Where:** `Serialize.cs` → `BuildNode` / `ObjectToNode`
-
-Self-referencing object graphs recurse without bound and will cause a
-`StackOverflowException`.
-
-**Suggested fix:** Track a visited-set or depth limit and throw a descriptive
-exception (or reference a documented limitation more clearly).
-
----
-
-## 4. Read-only properties are serialized but ignored on read — **Bug/Inconsistency**
+## 3. Read-only properties are serialized but ignored on read — **Bug/Inconsistency**
 
 **Where:** `Serialize.cs` (`ObjectToNode` serializes every readable property)
 and `Deserialize.cs` (`ReadObject` skips properties without a setter).
@@ -75,7 +63,7 @@ are consistent.
 
 ---
 
-## 5. `decimal` is serialized as a string — **Limitation**
+## 4. `decimal` is serialized as a string — **Limitation**
 
 **Where:** `Serialize.cs` → `PrimitiveToNode`
 
@@ -95,7 +83,7 @@ limitation, not a defect.
 
 ---
 
-## 6. Enum type resolution depends on loaded-assembly scanning — **Latent risk**
+## 5. Enum type resolution depends on loaded-assembly scanning — **Latent risk**
 
 **Where:** `DynTypeSerializer.cs` → `ResolveType`
 
@@ -114,7 +102,7 @@ already suppressed in the `.csproj`.
 
 ---
 
-## 7. Library project greedily globs subfolders — **Improvement (build)**
+## 6. Library project greedily globs subfolders — **Improvement (build)**
 
 **Where:** `DynTypeSerializer.csproj`
 
@@ -134,7 +122,7 @@ root solution (or keep adding exclusions).
 
 ---
 
-## 8. `ContainsRootType` / `GetRootType` re-parse JSON — **Performance**
+## 7. `ContainsRootType` / `GetRootType` re-parse JSON — **Performance**
 
 **Where:** `DynTypeSerializer.cs`
 
@@ -152,9 +140,8 @@ hot paths.
 |---|------|------|----------|
 | 1 | Logging helpers are dead code | Improvement | Low |
 | 2 | Non-standard logger injection | Improvement | Low |
-| 3 | No circular-ref detection | Limitation | Low |
-| 4 | Read-only props asymmetric | Bug/Inconsistency | Low |
-| 5 | `decimal` as string | Limitation | Info |
-| 6 | Enum resolution vs AOT | Latent risk | Medium |
-| 7 | Root project globs subfolders | Improvement (build) | Low |
-| 8 | Root helpers re-parse JSON | Performance | Low |
+| 3 | Read-only props asymmetric | Bug/Inconsistency | Low |
+| 4 | `decimal` as string | Limitation | Info |
+| 5 | Enum resolution vs AOT | Latent risk | Medium |
+| 6 | Root project globs subfolders | Improvement (build) | Low |
+| 7 | Root helpers re-parse JSON | Performance | Low |
