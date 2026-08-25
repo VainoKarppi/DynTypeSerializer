@@ -11,92 +11,10 @@ Legend:
 - **Improvement** — a design/pattern change that would align the library with
   Microsoft/.NET conventions.
 - **Limitation** — documented, accepted constraint (often unavoidable).
-- **✅ Fixed** — resolved; the entry is kept for historical context.
 
 ---
 
-## 1. Non-generic `Serialize(object)` never tags the root value — **Improvement / Bug**
-
-**Where:** `Serialize.cs` → `Serialize(object? obj, ...)`
-
-The non-generic overload passes the object's **actual runtime type** as the
-declared type:
-
-```csharp
-JsonNode? node = BuildNode(obj, obj?.GetType() ?? typeof(object), options);
-```
-
-Because the declared type and runtime type are identical, `NeedsTypeTag`
-returns `false`, so **no `$t` tag is emitted at the root** — even for a boxed
-value where you'd expect type preservation.
-
-**Repro:**
-
-```csharp
-object value = 42;
-Serializer.Serialize(value);        // "42"          (no $t tag)
-Serializer.Serialize<object>(value); // {"$t":"i","$v":42}  (tagged)
-```
-
-**Impact:** Calling `Serialize(value)` followed by `Deserialize<object>(...)`
-does **not** round-trip the type — a boxed `int` comes back as a `long`, and a
-`Dog` instance comes back as a `Dictionary<string, object>`.
-
-**Suggested fix:** Treat the non-generic overload as `object`-declared by
-passing `typeof(object)` as the declared type, so the root is always tagged for
-type preservation.
-
----
-
-## 2. `Deserialize<T>` throws instead of returning `null` — **Bug** ✅ Fixed
-
-**Where:** `Deserialize.cs` → `Deserialize<T>(string json)`
-
-**Fixed in commit/change:** The `if (result == null) throw ...` guard was
-removed; `Deserialize<T>` now returns `default(T)` when the value is null.
-
-```csharp
-object? result = ReadNode(root, typeof(T));
-return result is null ? default : (T)result;
-```
-
-Deserializing a JSON `null` (or a value that resolves to null) now returns
-`null`/`default(T)` rather than throwing.
-
-**Repro:**
-
-```csharp
-Serializer.Deserialize<string?>("null"); // now returns null
-```
-
-**Impact:** Consistent with conventional serializer behavior; callers no
-longer need try/catch to handle a legitimate `null` payload.
-
----
-
-## 3. Numbers in the `object` fallback become strings — **Bug** ✅ Fixed
-
-**Where:** `Deserialize.cs` → `ReadPrimitive`
-
-**Fixed in commit/change:** Added a `ReadJsonValueAsObject` helper that maps a
-raw `JsonElement` to its natural .NET type when the target is `object` (number
-→ `long`/`double`, `true`/`false` → `bool`, etc.), and `ReadPrimitive` now
-routes `object`-typed reads through it instead of `Convert.ChangeType`.
-
-**Repro:**
-
-```csharp
-var r = Serializer.DeserializeDynamic("{\"a\":1,\"b\":1.5,\"c\":true}");
-// r["a"] is long 1, r["b"] is double 1.5, r["c"] is bool true
-```
-
-**Impact:** Dynamic deserialization of a plain JSON object now preserves
-numeric and boolean value kinds, restoring round-trip type fidelity for
-untagged data.
-
----
-
-## 4. `SerializerLogging` internal helpers are dead code — **Improvement**
+## 1. `SerializerLogging` internal helpers are dead code — **Improvement**
 
 **Where:** `Logging.cs`
 
@@ -113,8 +31,7 @@ deserialization / type-resolution paths, or remove the unused surface.
 
 ---
 
-## 5. Non-standard logger injection pattern — **Improvement**
-
+## 2. Non-standard logger injection pattern — **Improvement**
 **Where:** `Logging.cs` → `SerializerLogging.Configure(ILogger)`
 
 The library exposes a custom static facade taking a single `ILogger`, which is
@@ -128,7 +45,7 @@ which matters given `<IsAotCompatible>true</IsAotCompatible>`).
 
 ---
 
-## 6. No circular-reference detection — **Limitation**
+## 3. No circular-reference detection — **Limitation**
 
 **Where:** `Serialize.cs` → `BuildNode` / `ObjectToNode`
 
@@ -140,7 +57,7 @@ exception (or reference a documented limitation more clearly).
 
 ---
 
-## 7. Read-only properties are serialized but ignored on read — **Bug/Inconsistency**
+## 4. Read-only properties are serialized but ignored on read — **Bug/Inconsistency**
 
 **Where:** `Serialize.cs` (`ObjectToNode` serializes every readable property)
 and `Deserialize.cs` (`ReadObject` skips properties without a setter).
@@ -158,7 +75,7 @@ are consistent.
 
 ---
 
-## 8. `decimal` is serialized as a string — **Limitation**
+## 5. `decimal` is serialized as a string — **Limitation**
 
 **Where:** `Serialize.cs` → `PrimitiveToNode`
 
@@ -178,7 +95,7 @@ limitation, not a defect.
 
 ---
 
-## 9. Enum type resolution depends on loaded-assembly scanning — **Latent risk**
+## 6. Enum type resolution depends on loaded-assembly scanning — **Latent risk**
 
 **Where:** `DynTypeSerializer.cs` → `ResolveType`
 
@@ -197,7 +114,7 @@ already suppressed in the `.csproj`.
 
 ---
 
-## 10. Library project greedily globs subfolders — **Improvement (build)**
+## 7. Library project greedily globs subfolders — **Improvement (build)**
 
 **Where:** `DynTypeSerializer.csproj`
 
@@ -217,24 +134,7 @@ root solution (or keep adding exclusions).
 
 ---
 
-## 11. `GetRootType` swallows all exceptions — **Minor**
-
-**Where:** `DynTypeSerializer.cs` → `GetRootType`
-
-```csharp
-} catch {
-    return null;
-}
-```
-
-Any parse/resolution failure returns `null`, making it hard to distinguish "no
-root type" from "malformed JSON" or "unresolvable type".
-
-**Suggested fix:** Narrow the catch or rethrow non-"no tag" failures.
-
----
-
-## 12. `ContainsRootType` / `GetRootType` re-parse JSON — **Performance**
+## 8. `ContainsRootType` / `GetRootType` re-parse JSON — **Performance**
 
 **Where:** `DynTypeSerializer.cs`
 
@@ -250,15 +150,11 @@ hot paths.
 
 | # | Area | Kind | Severity |
 |---|------|------|----------|
-| 1 | `Serialize(object)` no root tag | Bug/Improvement | High |
-| 2 | `Deserialize<T>` throws on null | Bug ✅ Fixed | Medium |
-| 3 | Numbers become strings in `object` fallback | Bug ✅ Fixed | Medium |
-| 4 | Logging helpers are dead code | Improvement | Low |
-| 5 | Non-standard logger injection | Improvement | Low |
-| 6 | No circular-ref detection | Limitation | Low |
-| 7 | Read-only props asymmetric | Bug/Inconsistency | Low |
-| 8 | `decimal` as string | Limitation | Info |
-| 9 | Enum resolution vs AOT | Latent risk | Medium |
-| 10 | Root project globs subfolders | Improvement (build) | Low |
-| 11 | `GetRootType` swallows errors | Minor | Low |
-| 12 | Root helpers re-parse JSON | Performance | Low |
+| 1 | Logging helpers are dead code | Improvement | Low |
+| 2 | Non-standard logger injection | Improvement | Low |
+| 3 | No circular-ref detection | Limitation | Low |
+| 4 | Read-only props asymmetric | Bug/Inconsistency | Low |
+| 5 | `decimal` as string | Limitation | Info |
+| 6 | Enum resolution vs AOT | Latent risk | Medium |
+| 7 | Root project globs subfolders | Improvement (build) | Low |
+| 8 | Root helpers re-parse JSON | Performance | Low |
